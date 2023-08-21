@@ -1,0 +1,92 @@
+---
+title: "HAR"
+author: "Steffen Hess"
+date: "10/24/2014"
+output: html_document
+---
+
+
+
+# Executive summary
+# Analysis
+## Loading data
+Loading the data and splitting it to experiment on the model
+```{r setup, cache = F, echo = F, message = F, warning = F, tidy = F}
+training <- read.csv(file='pml-training.csv',sep=',',header=T,na.strings=c("NA","NaN", "#DIV/0!"))
+testing<- read.csv(file='pml-testing.csv',sep=',',header=T,na.strings=c("NA","NaN", "#DIV/0!"))
+library(caret); library(randomForest); set.seed(13234)
+testIndex = createDataPartition(training$classe, p = 0.30,list=FALSE)
+mytrain = training[-testIndex,]
+mytest = training[testIndex,]
+```
+
+## Reducing sparse variables
+Some columns are sparsely populated and hence a bad predictors for out of sample questions. Getting rid of all sparsely populated columns:
+```{r}
+mask <- is.na(mytrain)
+clM<-colMeans(mask)
+thres <- min(clM[clM>0])
+ii <- (colMeans(mask) < thres)
+mytrain_red <- mytrain[,ii]
+summary(ii) ### 60 columns remaining
+```
+Only 60 columns are reliably populated
+  
+## Omitting sample specific variables
+Some variables such as row number `X`, time, `user_name` are specific to the sample and not helpful for predictions
+```{r drop}
+drop <-  c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp" ,"new_window","num_window")
+mytrain_red2 <- mytrain_red[,!(names(mytrain_red) %in% drop)]
+dim(mytrain_red2)
+```
+Reduced dimensions.
+
+## Exploratory models
+### First try
+Fitting what we have:
+```{r rfr2}
+rfr2<-randomForest(classe ~ .,data=mytrain_red2)
+print(rfr2)
+```
+Let's see if we can reduce the number of predictors to reduce bias and prevent overfitting.
+
+### Reduced model
+```{r rfr2imp}
+#library(caret)
+imp <- varImp(rfr2)
+summary(imp)
+ii<-imp<95.4
+names(mytrain_red2[,ii])
+```
+There seems to be many of the 3D data among the least important predictors. The magnitude of the effects is also in the data, so the 3D data might be less important.
+
+```{r red4,dependson="drop"}
+drp <- c(drop,names(mytrain_red[grepl('_x',names(mytrain_red))]))
+drp <- c(drp,names(mytrain_red[grepl('_y',names(mytrain_red))]))
+drp <- c(drp,names(mytrain_red[grepl('_z',names(mytrain_red))]))
+mytrain_red4 <- mytrain_red[,!(names(mytrain_red) %in% drp)]
+dim(mytrain_red4)
+```
+reduced dimensions to 17. Now using the Random forest of the 'caret package' because it tries multiple values for several of the key model parameters and performs a more elaborate form of cross-validation. Furthermore computing an out of sample error:
+```{r rfr4,dependson="red4"}
+modelrf4 <- train(classe ~ ., method='rf',data=mytrain_red4)
+#modelrf4 <- randomForest(classe ~ .,data=mytrain_red4)
+
+prd<-predict(modelrf4,mytest)
+cm<-confusionMatrix(prd,mytest$classe)
+cm
+```
+and plotting the confusion matrix with a log-colorscale:
+```{r,dependson="rfr4", echo=FALSE}
+aa<-(cm$table+1)#/sum(cm$table+1)
+for (i in seq(5)) aa[,i] <- aa[,i]/colMeans(aa)[i]/5
+library(reshape)
+ggplot(melt(aa), aes(Reference,Prediction, fill=value)) + geom_raster()+ scale_fill_gradient( trans = 'log',name="log(Pr)")
+```
+
+## Predicting on the test sample
+Using this model to predict the testing set
+```{r,dependson="rfr4"}
+predict(modelrf4,testing)
+```
+ 
