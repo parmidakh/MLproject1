@@ -1,13 +1,19 @@
-training <- read.csv(file='pml-training.csv',sep=',',header=T,na.strings=c("NA","NaN", "#DIV/0!"))
+### This line reads the CSV file named "pml-training.csv" and stores its contents in the variable training.
+training <- read.csv(file='pml-training.csv',sep=',',header=T,na.strings=c("NA","NaN", "#DIV/0!")) 
+### This line reads the CSV file named "pml-testing.csv" and stores its contents in the variable testing. Similar to the previous line, it uses the read.csv function with the same parameters.
 testing<- read.csv(file='pml-testing.csv',sep=',',header=T,na.strings=c("NA","NaN", "#DIV/0!"))
 
+### This line uses the createDataPartition function from the "caret" package to partition the training data into two subsets: one for training and one for testing. 
 testIndex = createDataPartition(training$classe, p = 0.30,list=FALSE)
+###  This line creates the mytrain dataset by excluding the rows specified by the testIndex vector from the training dataset. In other words, it contains the data that will be used for model training.
 mytrain = training[-testIndex,]
 mytest = training[testIndex,]
 
 
 ### ommitting sparse columns
+### This line creates a logical matrix mask that has the same dimensions as the mytrain dataset. Each element of the mask matrix is TRUE if the corresponding element in the mytrain dataset is a missing value (NA), and FALSE otherwise. This matrix effectively identifies the missing values in the mytrain dataset.
 mask <- is.na(mytrain)
+###  This line calculates the column-wise mean of the logical mask matrix. Since TRUE is treated as 1 and FALSE as 0 in R, the resulting clM vector represents the proportion of missing values in each column of the mytrain dataset. Higher values indicate more missing values in a column.
 clM<-colMeans(mask)
 thres <- min(clM[clM>0])
 ii <- (colMeans(mask) < thres)
@@ -15,6 +21,7 @@ summary(ii) ### 60 columns remaining
 mytrain_red <- mytrain[,ii]
 
 ### ommitting properties that mustn't be relevant for a decision
+### this part of the code creates a new dataset named mytrain_red2 that is a modified version of the previously reduced dataset mytrain_red. It excludes specific columns (listed in drops) that are not considered useful for analysis or modeling. This step can help streamline the dataset by removing irrelevant or redundant information.
 drops <-  c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp" ,"new_window","num_window")
 mytrain_red2 <- mytrain_red[,!(names(mytrain_red) %in% drops)]
 
